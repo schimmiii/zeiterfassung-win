@@ -1,19 +1,26 @@
 # Zeiterfassung (Windows)
 
-Kleine Tray-App zur Arbeitszeiterfassung. Windows-Neubau der macOS-Menuleisten-App
-(gleiche Regeln, gleiches Segment-Modell).
+Tray-App zur Arbeitszeiterfassung. Windows-Neubau der macOS-Menüleisten-App —
+gleiche Regeln, gleiches Segment-Modell, gleicher Funktionsstand.
 
-**Status: in Entwicklung — Push 2 von 4.**
+**Status: funktional vollständig (Push 4 von 4).**
 
-Fertig:
-- Zeit tracken (Start/Stop, Segmente, Persistenz)
-- Tray-Icon mit zweizeiliger Tagessumme (laufend = blau, gestoppt = grau)
-- WLAN-Auto-Start (kantengesteuert) — *noch nicht auf echtem Windows verifiziert*
+Funktionen:
+- Zeit tracken (Start/Stop, Segmente, Persistenz, Sekundentakt)
+- Tray-Icon mit zweizeiliger Tagessumme (laufend blau / gestoppt grau)
+- WLAN-Auto-Start (kantengesteuert: zuhause/büro→Start, auswärts→Stop, kein WLAN→Stop)
+- Popup-Panel (Linksklick): Home (STATUS + Saldo), Woche, Übersicht (Monat/Jahr),
+  Export (CSV/XLSX), Nachtragen, Einstellungen
+- Zeitkonto (Modell B): Saldo grün/rot, Wochenstunden/Anfangssaldo/Kontostart
+- Auto-Start bei Login (Registry Run-Key)
+- Pause bei Sleep/Bildschirmsperre, weiter bei Wake/Unlock
 
-Kommt noch:
-- Push 3: Popup-Panel mit Home / Woche / Nachtragen / Einstellungen
-- Push 4: Auto-Start bei Login, Pause bei Sleep/Bildschirmsperre
+Bedienung: Linksklick = Popup, Rechtsklick = Start/Stop + Beenden.
 
-Bedienung aktuell ueber **Rechtsklick aufs Tray-Icon**.
+Siehe **SETUP.md** zum Bauen, Testen und für die Rückmeldung.
 
-Siehe **SETUP.md** zum Bauen, Testen und fuer die Rueckmeldung.
+## Was auf echtem Windows noch verifiziert werden muss
+Alles kompiliert sauber; die XLSX-Erzeugung ist gegen einen Excel-Parser validiert.
+NICHT laufzeit-geprüft (Linux-Build-Umgebung): WLAN-SSID-Lesen (P/Invoke-Offsets),
+Win11-Standort-Gate, Icon-Glyphen (Segoe Fluent Codepoints), Sleep/Lock-Events,
+Login-Autostart. Details in SETUP.md.

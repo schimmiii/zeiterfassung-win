@@ -1,76 +1,66 @@
-# SETUP — Bauen, Testen, Rueckmelden
+# SETUP — Bauen, Testen, Rückmelden
 
 Hi Sebastian J.,
 
-das ist eine kleine Tray-App zur Zeiterfassung, aktuell **mitten im Bau** (Push 2 von 4).
-Ich brauche von dir einen kurzen **Smoke-Test auf echtem Windows**, weil zwei Dinge
-plattformbedingt nicht vorab pruefbar waren (siehe unten). Danach baue ich die
-Vollversion (Panel + Auto-Start bei Login) fertig.
-
-Du hast Claude Code — am einfachsten ist, du oeffnest den Ordner damit und laesst
-dir beim Bauen/Fixen helfen.
-
----
+Zeiterfassungs-Tray-App, jetzt **funktional vollständig**. Baubar mit Claude Code + .NET 8.
+Ich konnte auf meiner Build-Umgebung nur kompilieren, nicht ausführen — daher brauche
+ich einen Testlauf auf echtem Windows. Danke schon mal!
 
 ## 1. Voraussetzung
+.NET 8 SDK:  `dotnet --version`  (sonst: https://dotnet.microsoft.com/download/dotnet/8.0)
 
-.NET 8 SDK. Pruefen:
-
-    dotnet --version
-
-Wenn nichts kommt: https://dotnet.microsoft.com/download/dotnet/8.0 (SDK, nicht nur Runtime).
-
-## 2. Bauen + starten (zum Testen)
-
+## 2. Starten (Test)
     cd zeiterfassung-win
     dotnet run -c Release
+Konsolenfenster offen lassen (zeigt Fehler). Tray-Icon erscheint unten rechts (evtl. unter „^").
 
-Ein Tray-Icon erscheint (unten rechts, evtl. im Ueberlauf-Pfeil "^"). Laeuft ueber
-`dotnet run` als Konsolen-Prozess — Fenster offen lassen; Fehler/Abstuerze erscheinen dort.
-
-## 3. Fuer echte Nutzung: eigenstaendige .exe bauen
-
+## 3. Eigenständige .exe (echte Nutzung)
     dotnet publish -c Release -r win-x64
+→ `bin/Release/net8.0-windows/win-x64/publish/Zeiterfassung.exe` (doppelklickbar).
 
-Ergebnis: `bin/Release/net8.0-windows/win-x64/publish/Zeiterfassung.exe`
-Doppelklickbar. (Braucht das .NET-8-Runtime — hast du via SDK.)
-Voll autark ohne Runtime-Abhaengigkeit: zusaetzlich `--self-contained true -p:PublishSingleFile=true`
-(dann ~150 MB Einzeldatei).
+## 4. Testablauf (Screenshots wo möglich)
 
-Auto-Start bei Login gibt es noch NICHT (kommt in Push 4) — bis dahin manuell starten.
+**Tray-Icon**
+1. Icon da? Zeigt „0 / 00" (Stunden über Minuten). Auf deiner Skalierung lesbar? (Screenshot)
 
----
+**Popup (Linksklick)**
+2. Öffnet unten rechts, schließt bei Klick daneben (Fokusverlust)?
+3. Icons in den Zeilen korrekt? (Segoe-Fluent-Glyphen — bei leeren Kästchen bitte Screenshot,
+   dann stimmt ein Codepoint nicht; zentral in `Glyphs` justierbar.)
+4. Start/Stop: Zahl tickt hoch/stoppt, „seit HH:MM" plausibel.
+5. STATUS: echter WLAN-Name in der Kopfzeile? „merken" ordnet aktuelles Netz zu.
+6. Saldo-Zeile plausibel (grün/rot, +/−)?
+7. Woche: Balken + Summe stimmig?
 
-## 4. Was ich getestet brauche (ca. 10 Min)
+**Übersicht / Export**
+8. Übersicht: Monat/Jahr, mit ‹ › blättern (nicht in die Zukunft). Balken + Summe.
+9. Export: Scope + CSV/XLSX + „Detailliert" → speichern.
+   - XLSX in Excel: Dauer als Zahl mit Komma (z. B. 12,27), Umlaute korrekt?
+   - CSV in Excel: Semikolon, Datum TT.MM.JJJJ, Summenzeile?
+   (XLSX-Struktur ist bereits gegen einen Excel-Parser validiert.)
 
-Bitte kurz durchgehen, Screenshots wo moeglich:
+**Nachtragen**
+10. Datum/Von/Bis → „Hinzufügen" → erscheint unter HEUTE; löschbar; laufendes zeigt „läuft".
 
-1. **Startet + Tray-Icon da?** Icon zeigt "0 / 00" (Stunden ueber Minuten).
-2. **Icon lesbar?** Auf deiner Bildschirm-Skalierung (100/125/150 %) — Screenshot vom
-   Tray-Icon. Das ist der Punkt, an dem die zweizeilige Zeit stehen/fallen kann.
-3. **Tracking:** Linksklick aufs Icon (oder Rechtsklick -> Starten). Zahl muss hochticken.
-   Nochmal klicken -> stoppt.
-4. **Persistenz:** Mit laufender Zeit die App beenden (Rechtsklick -> Beenden) und neu
-   `dotnet run`. Die Zeit muss weiterlaufen (offenes Segment bleibt offen).
-5. **WLAN-SSID (WICHTIG):** Rechtsklick aufs Icon. Oben steht "WLAN: <name>".
-   - Steht dort dein echter WLAN-Name? -> gut.
-   - Steht dort Muell/leer, obwohl verbunden? -> Byte-Offsets im nativen WLAN-Call
-     stimmen nicht. Bitte melden (Screenshot).
-   - Steht "nicht ermittelbar (Standort-Freigabe?)" trotz WLAN? -> Windows blockt die
-     SSID hinter den Standortdiensten. Test: Einstellungen -> Datenschutz ->
-     Standort -> aktivieren, App neu starten. Wird die SSID dann sichtbar? (Genau das
-     muss ich wissen.)
-6. **Auto-Start-Regel:** Rechtsklick -> "Aktuelles WLAN als Zuhause merken" ->
-   "Auto-Start per WLAN" anklicken. Dann WLAN trennen (sollte stoppen) und wieder
-   verbinden (sollte starten). Klappt der Wechsel?
+**Einstellungen**
+11. Toggles (Auto-Start / Auswärts stoppen / Beim Login starten) schalten sichtbar um?
+    „Auswärts stoppen" ist ausgegraut, wenn Auto-Start aus ist.
+12. Zeitkonto: Wochenstunden/Anfangssaldo (Zahlenfelder), Kontostart (Datum) → wirkt auf Saldo?
+13. WLAN-Zuordnung: „×" löscht die Zuordnung.
+14. **Beim Login starten** an → Windows neu anmelden → startet die App automatisch?
+    (Prüfbar auch in: Task-Manager → Autostart → „Zeiterfassung".)
 
-## 5. Rueckmeldung an Sebby
+**WLAN-Auto-Start** (kritisch, plattformabhängig)
+15. Auto-Start ist Default AN. WLAN trennen → stoppt? Bekanntes Netz verbinden → startet?
+16. Falls „nicht ermittelbar (Standort-Freigabe?)": Windows-Standortdienste an
+    (Einstellungen → Datenschutz → Standort) → wird SSID danach lesbar?
 
-- Screenshots von Tray-Icon (versch. Zoomstufen wenn moeglich) + dem Rechtsklick-Menue
-- Bei Absturz: den Text aus dem `dotnet run`-Fenster
-- Ergebnis von Punkt 5 (SSID) und 6 (Auto-Start) — das sind die kritischen zwei
+**Sleep/Lock**
+17. Zeit läuft, dann Bildschirm sperren (Win+L) → beim Entsperren: hat die Zeit während
+    der Sperre pausiert (kein Sprung)? Gleiches bei Standby/Aufwecken.
 
-Daten liegen unter `%APPDATA%\Zeiterfassung\` (segments.json, settings.json) — bei
-komischem Verhalten gern mitschicken.
+## 5. Rückmeldung an Sebby
+Wichtigste Punkte: 3 (Icons), 6 (Saldo), 9 (Export-Anzeige), 14 (Login), 15/16 (WLAN), 17 (Sleep/Lock).
+Bei Absturz: Text aus dem `dotnet run`-Fenster. Daten: `%APPDATA%\Zeiterfassung\`.
 
-Danke! Sobald 5 + 6 gruen sind, kommt die Version mit Panel und Auto-Start bei Login.
+Danke!

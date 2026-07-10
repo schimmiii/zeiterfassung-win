@@ -18,6 +18,25 @@ public readonly record struct WifiReading(WifiState State, string? Ssid)
     public string Key => $"{State}:{Ssid}";
 }
 
+/// <summary>Abgeleiteter Aufenthaltsort (wie macOS WorkLocation).</summary>
+public enum WorkLocation { Zuhause, Buero, Auswaerts, KeinWLAN, KeineBerechtigung }
+
+public static class LocationClassifier
+{
+    public static WorkLocation Classify(WifiReading r, Settings s) => r.State switch
+    {
+        WifiState.Unavailable => WorkLocation.KeineBerechtigung,
+        WifiState.Disconnected => WorkLocation.KeinWLAN,
+        _ when Eq(r.Ssid, s.HomeSsid) => WorkLocation.Zuhause,
+        _ when Eq(r.Ssid, s.OfficeSsid) => WorkLocation.Buero,
+        _ => WorkLocation.Auswaerts
+    };
+
+    private static bool Eq(string? a, string? b) =>
+        !string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b) &&
+        string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>
 /// Liest die aktuelle WLAN-SSID ueber die Native WiFi API (wlanapi.dll).
 /// Bewusst KEIN netsh-Parsing (Feldnamen sind auf DE-Windows lokalisiert).

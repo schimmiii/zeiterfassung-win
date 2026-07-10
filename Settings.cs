@@ -4,14 +4,30 @@ namespace Zeiterfassung;
 
 /// <summary>
 /// Persistente Einstellungen in %APPDATA%\Zeiterfassung\settings.json.
-/// Push 2: Auto-Start per WLAN. Push 4 ergaenzt LaunchAtLogin etc.
+/// Defaults an den Mac-Stand angeglichen: Auto-Start an, Auswaerts-Stopp an.
+/// Zeitkonto (Modell B): Wochenstunden, Anfangssaldo, Kontostart.
 /// </summary>
 public sealed class Settings
 {
-    public bool AutoStartEnabled { get; set; }
-    public bool StopWhenAway { get; set; }
+    // Auto-Start per WLAN — Default AN (wie Mac).
+    public bool AutoStartEnabled { get; set; } = true;
+    // Bei unbekanntem Netz stoppen — Default AN (wie Mac).
+    public bool StopWhenAway { get; set; } = true;
+
     public string? HomeSsid { get; set; }
     public string? OfficeSsid { get; set; }
+
+    // Zeitkonto
+    public double Wochenstunden { get; set; } = 40;
+    public double AnfangssaldoH { get; set; }
+    /// <summary>Persistierter Kontostart; null → frühestes Segment (vom Aufrufer aufgeloest).</summary>
+    public DateTime? KontostartStored { get; set; }
+
+    // Push 4: LaunchAtLogin (via Registry Run-Key)
+
+    /// <summary>Effektiver Kontostart: gesetzt → gespeichert, sonst frühestes Segment, sonst heute.</summary>
+    public DateTime KontostartOr(DateTime? earliest) =>
+        KontostartStored ?? earliest ?? DateTime.Now;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
