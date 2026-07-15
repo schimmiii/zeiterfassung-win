@@ -109,7 +109,9 @@ public sealed class PanelForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        AutoScaleMode = AutoScaleMode.Dpi;
+        // None: WinForms skaliert NICHT automatisch. Wir bauen logisch @96 und skalieren
+        // den Baum selbst (ScaleTree) -> kein Doppel-Skalieren gegen die Font-DPI.
+        AutoScaleMode = AutoScaleMode.None;
         BackColor = Theme.Bg;
         Font = new Font("Segoe UI", 9f);
         ClientSize = new Size(300, 520);
@@ -143,6 +145,33 @@ public sealed class PanelForm : Form
         catch { return new Font("Segoe MDL2 Assets", size); }
     }
 
+    // MARK: DPI-Skalierung (Weg A)
+    // Layout wird logisch @96 gebaut und pro Rebuild einmal auf die reale DPI skaliert.
+    // Fonts skalieren GDI-seitig ueber ihre Punktgroesse selbst -> hier NUR Geometrie.
+    private float _scale = 1f;
+    private int Sc(int px) => (int)Math.Round(px * _scale);
+    private static int Rnd(int v, float f) => (int)Math.Round(v * f);
+
+    /// <summary>Skaliert Size/Margin/Padding aller Kinder rekursiv; bei absoluter
+    /// Anordnung auch die Position. In FlowLayoutPanels steuert der Flow die Position,
+    /// dort nur Size/Margin. Fonts bleiben unangetastet.</summary>
+    private void ScaleTree(Control parent, float f)
+    {
+        bool flow = parent is FlowLayoutPanel;
+        foreach (Control c in parent.Controls)
+        {
+            var m = c.Margin;
+            c.Margin = new Padding(Rnd(m.Left, f), Rnd(m.Top, f), Rnd(m.Right, f), Rnd(m.Bottom, f));
+            var p = c.Padding;
+            c.Padding = new Padding(Rnd(p.Left, f), Rnd(p.Top, f), Rnd(p.Right, f), Rnd(p.Bottom, f));
+            if (flow)
+                c.Size = new Size(Rnd(c.Width, f), Rnd(c.Height, f));
+            else
+                c.Bounds = new Rectangle(Rnd(c.Left, f), Rnd(c.Top, f), Rnd(c.Width, f), Rnd(c.Height, f));
+            if (c.HasChildren) ScaleTree(c, f);
+        }
+    }
+
     // MARK: Anzeigen / Positionieren / Schliessen
 
     public void Toggle()
@@ -153,10 +182,14 @@ public sealed class PanelForm : Form
 
     private void ShowNearTray()
     {
+        _ = Handle;                                    // Handle erzwingen -> DeviceDpi gueltig
+        _scale = DeviceDpi / 96f;                      // 1.0 @100%, 1.25 @125%, 1.5 @150%
+        ClientSize = new Size(Sc(300), Sc(520));       // Fenster fuer skalierte Inhalte
+        _content.Padding = new Padding(0, Sc(6), 0, Sc(8));   // aus Konstanten -> nicht kumulativ
         _screen = Screen.Home;
         Rebuild();
         var wa = Screen_FromCursor().WorkingArea;
-        Location = new Point(wa.Right - Width - 8, wa.Bottom - Height - 8);
+        Location = new Point(wa.Right - Width - Sc(8), wa.Bottom - Height - Sc(8));
         Show();
         Activate();
         _live.Start();
@@ -218,6 +251,7 @@ public sealed class PanelForm : Form
             case Screen.Export: BuildExport(); break;
             case Screen.Einstellungen: BuildEinstellungen(); break;
         }
+        if (_scale != 1f) ScaleTree(_content, _scale);   // frisch gebaute Controls einmal skalieren
         _content.ResumeLayout();
     }
 
@@ -1000,17 +1034,18 @@ internal sealed class ToggleSwitch : Control
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        int h = 18, w = 36, y = (Height - h) / 2;
+        float s = DeviceDpi / 96f;   // selbstgezeichnet -> eigene DPI-Skalierung
+        int h = (int)(18 * s), w = (int)(36 * s), y = (Height - h) / 2;
         var track = new Rectangle(0, y, w, h);
         var col = !Enabled ? Color.FromArgb(230, 232, 236) : (_on ? Theme.Accent : Theme.TrackOff);
         using (var b = new SolidBrush(col))
         using (var path = Rounded(track, h / 2))
             g.FillPath(b, path);
 
-        int d = h - 4;
-        int kx = _on ? track.Right - d - 2 : track.Left + 2;
+        int d = h - (int)(4 * s);
+        int kx = _on ? track.Right - d - (int)(2 * s) : track.Left + (int)(2 * s);
         using var kb = new SolidBrush(Color.White);
-        g.FillEllipse(kb, kx, track.Top + 2, d, d);
+        g.FillEllipse(kb, kx, track.Top + (int)(2 * s), d, d);
     }
 
     private static GraphicsPath Rounded(Rectangle r, int rad)
