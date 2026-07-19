@@ -410,6 +410,7 @@ public sealed class PanelForm : Form
 
     private DateTimePicker? _dpDay, _dpVon, _dpBis;
     private Button? _addBtn;
+    private DateTime _ntDay = DateTime.Today;   // gewaehltes Nachtragen-Datum (ueberlebt Rebuild)
 
     private void BuildNachtragen()
     {
@@ -417,6 +418,7 @@ public sealed class PanelForm : Form
         _content.Controls.Add(Divider());
 
         _dpDay = FieldRow("Datum", out var r1); _dpDay.Format = DateTimePickerFormat.Short;
+        _dpDay.Value = _ntDay;   // Auswahl wiederherstellen — VOR dem Handler, sonst Rebuild-Schleife
         _content.Controls.Add(r1);
         _dpVon = FieldRow("Von", out var r2); TimePicker(_dpVon, 9, 0);
         _content.Controls.Add(r2);
@@ -433,23 +435,23 @@ public sealed class PanelForm : Form
         _addBtn.Click += (_, _) => AddManual();
         _dpVon.ValueChanged += (_, _) => UpdateAddButton();
         _dpBis.ValueChanged += (_, _) => UpdateAddButton();
-        _dpDay.ValueChanged += (_, _) => UpdateAddButton();
+        _dpDay.ValueChanged += (_, _) => { _ntDay = _dpDay.Value.Date; Rebuild(); };   // Datumwechsel -> Liste neu
         UpdateAddButton();
         _content.Controls.Add(_addBtn);
 
         _content.Controls.Add(Divider());
-        _content.Controls.Add(SectionLabel("HEUTE"));
+        _content.Controls.Add(SectionLabel(NtDayLabel()));
 
-        var todays = _tracker.TodaySegments();
-        if (todays.Count == 0)
+        var daySegs = _tracker.DaySegmentsFor(_ntDay);
+        if (daySegs.Count == 0)
         {
-            var none = Text12("keine Segmente", Theme.Tert);
-            var row = NewRow(22); none.SetBounds(14, 3, 200, 16); row.Controls.Add(none);
+            var none = Text12("keine Segmente an diesem Tag", Theme.Tert);
+            var row = NewRow(22); none.SetBounds(14, 3, 220, 16); row.Controls.Add(none);
             _content.Controls.Add(row);
         }
         else
         {
-            foreach (var seg in todays)
+            foreach (var seg in daySegs)
             {
                 var row = NewRow(24);
                 var range = Text12($"{seg.Start:HH:mm} – {(seg.End is { } e ? e.ToString("HH:mm") : "…")}", Theme.Ink);
@@ -506,6 +508,13 @@ public sealed class PanelForm : Form
         var (s, e) = NachtragenRange();
         _tracker.AddManual(s, e);
         Rebuild();
+    }
+
+    /// <summary>Ueberschrift der Segmentliste: „HEUTE" am heutigen Tag, sonst Wochentag + Datum.</summary>
+    private string NtDayLabel()
+    {
+        if (_ntDay.Date == DateTime.Today) return "HEUTE";
+        return _ntDay.ToString("ddd, dd.MM.yyyy", CultureInfo.CurrentCulture).ToUpperInvariant();
     }
 
     private DateTimePicker FieldRow(string label, out Panel row)

@@ -90,16 +90,19 @@ public sealed class TimeTracker
         Changed?.Invoke();
     }
 
-    /// <summary>Segmente, die den heutigen Tag beruehren — sortiert, fuers Nachtragen-Panel.</summary>
-    public List<WorkSegment> TodaySegments()
+    /// <summary>Segmente, die einen bestimmten Kalendertag beruehren — sortiert, fuers Nachtragen-Panel.</summary>
+    public List<WorkSegment> DaySegmentsFor(DateTime day)
     {
         var now = DateTime.Now;
-        var iv = DayInterval(now);
+        var iv = DayInterval(day);
         return _segments
             .Where(s => (s.End ?? now) > iv.Start && s.Start < iv.End)
             .OrderBy(s => s.Start)
             .ToList();
     }
+
+    /// <summary>Segmente, die den heutigen Tag beruehren.</summary>
+    public List<WorkSegment> TodaySegments() => DaySegmentsFor(DateTime.Now);
 
     // MARK: Summen
 
