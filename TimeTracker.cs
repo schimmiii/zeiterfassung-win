@@ -58,6 +58,19 @@ public sealed class TimeTracker
 
     private bool _wasRunningBeforePause;
 
+    /// <summary>Vom Host gesetzt: darf gerade automatisch gestartet/fortgesetzt werden?
+    /// Kapselt die Werktags-Regel (Default: immer erlaubt). 1:1 aus der Swift-App.</summary>
+    public Func<bool> AutoStartAllowed { get; set; } = () => true;
+
+    /// <summary>Einziger Auto-Start-Pfad. Bündelt die Werktags-Regel an EINER Stelle, damit
+    /// kein Auto-Pfad (WLAN/Sleep/Lock) sie vergessen kann. Der manuelle Start/Toggle
+    /// umgeht das bewusst und ruft direkt <see cref="Start"/>.</summary>
+    public void AutoStart()
+    {
+        if (!AutoStartAllowed()) return;
+        Start();
+    }
+
     /// <summary>Pausiert nur, wenn wirklich gerade laeuft — Flag bleibt bei Sleep UND Lock erhalten.</summary>
     public void PauseForSystem()
     {
@@ -70,7 +83,7 @@ public sealed class TimeTracker
     {
         if (!_wasRunningBeforePause) return;
         _wasRunningBeforePause = false;
-        Start();
+        AutoStart();   // Werktags-Regel greift auch beim Wake/Unlock
     }
 
     // MARK: Nachtragen / Korrektur

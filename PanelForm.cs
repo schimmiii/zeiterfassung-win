@@ -883,6 +883,10 @@ public sealed class PanelForm : Form
             _settings.StopWhenAway, enabled: _settings.AutoStartEnabled, on =>
             { _settings.StopWhenAway = on; _settings.Save(); _onAutoConfig(); }));
 
+        _content.Controls.Add(ToggleRow(IconLabel(Glyphs.Calendar, Theme.Sub, _iconFont), "Nur Werktage (Mo–Fr)",
+            _settings.AutoStartWorkdaysOnly, enabled: _settings.AutoStartEnabled, on =>
+            { _settings.AutoStartWorkdaysOnly = on; _settings.Save(); }));
+
         _content.Controls.Add(ToggleRow(IconLabel(Glyphs.Power, Theme.Sub, _iconFont), "Beim Login starten",
             LaunchAtLogin.IsEnabled, enabled: true, on => LaunchAtLogin.Set(on)));
 

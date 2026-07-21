@@ -13,6 +13,8 @@ public sealed class Settings
     public bool AutoStartEnabled { get; set; } = true;
     // Bei unbekanntem Netz stoppen — Default AN (wie Mac).
     public bool StopWhenAway { get; set; } = true;
+    // Auto-Start nur Mo–Fr — Default AN (wie Mac). Verhindert Wochenend-Erfassung.
+    public bool AutoStartWorkdaysOnly { get; set; } = true;
 
     public string? HomeSsid { get; set; }
     public string? OfficeSsid { get; set; }

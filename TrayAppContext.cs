@@ -31,6 +31,11 @@ public sealed class TrayAppContext : ApplicationContext
     {
         _auto = new AutoStartController(_tracker, _settings);
 
+        // Werktags-Regel zentral am Tracker: alle Auto-Pfade (WLAN/Sleep/Lock) laufen
+        // durch AutoStart() und werden hierdurch am Wochenende gesperrt.
+        _tracker.AutoStartAllowed = () =>
+            !(_settings.AutoStartWorkdaysOnly && IsWeekend(DateTime.Now));
+
         _panel = new PanelForm(
             _tracker, _settings,
             wifi: () => _lastWifi,
@@ -164,6 +169,9 @@ public sealed class TrayAppContext : ApplicationContext
     }
 
     private static string Trunc(string s, int max) => s.Length <= max ? s : s[..max];
+
+    private static bool IsWeekend(DateTime d) =>
+        d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
 
     private void ExitApp()
     {

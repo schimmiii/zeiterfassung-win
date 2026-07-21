@@ -44,7 +44,7 @@ public sealed class AutoStartController
                 if (Matches(reading.Ssid, _settings.HomeSsid) ||
                     Matches(reading.Ssid, _settings.OfficeSsid))
                 {
-                    _tracker.Start();
+                    _tracker.AutoStart();   // Werktags-Regel zentral in AutoStart()
                 }
                 else if (_settings.StopWhenAway)
                 {
