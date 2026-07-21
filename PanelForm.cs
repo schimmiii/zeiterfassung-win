@@ -31,6 +31,7 @@ internal static class Glyphs
     public const string Location = "\uE81D";
     public const string ChevronRight = "\uE76C";
     public const string ChevronLeft = "\uE76B";
+    public const string Away = "\uE706";        // Sonne \u2014 Abwesenheit/Urlaub
 }
 
 internal static class Theme
@@ -54,7 +55,7 @@ internal static class Theme
 /// </summary>
 public sealed class PanelForm : Form
 {
-    public enum Screen { Home, Woche, Uebersicht, Export, Nachtragen, Einstellungen }
+    public enum Screen { Home, Woche, Uebersicht, Export, Nachtragen, Abwesenheit, Einstellungen }
 
     private readonly TimeTracker _tracker;
     private readonly Settings _settings;
@@ -247,6 +248,7 @@ public sealed class PanelForm : Form
             case Screen.Home: BuildHome(); break;
             case Screen.Woche: BuildWoche(); break;
             case Screen.Nachtragen: BuildNachtragen(); break;
+            case Screen.Abwesenheit: BuildAbwesenheit(); break;
             case Screen.Uebersicht: BuildUebersicht(); break;
             case Screen.Export: BuildExport(); break;
             case Screen.Einstellungen: BuildEinstellungen(); break;
@@ -308,6 +310,7 @@ public sealed class PanelForm : Form
         _content.Controls.Add(ActionRow(Glyphs.Calendar, "Übersicht", chevron: true, onClick: () => Navigate(Screen.Uebersicht)));
         _content.Controls.Add(ActionRow(Glyphs.Upload, "Exportieren…", chevron: true, onClick: () => Navigate(Screen.Export)));
         _content.Controls.Add(ActionRow(Glyphs.Edit, "Nachtragen…", chevron: true, onClick: () => Navigate(Screen.Nachtragen)));
+        _content.Controls.Add(ActionRow(Glyphs.Away, "Abwesenheit…", chevron: true, onClick: () => Navigate(Screen.Abwesenheit)));
         _content.Controls.Add(ActionRow(Glyphs.Settings, "Einstellungen", chevron: true, onClick: () => Navigate(Screen.Einstellungen)));
 
         _content.Controls.Add(Divider());
@@ -390,7 +393,9 @@ public sealed class PanelForm : Form
                 Size = new Size(Math.Max(fillW, 2), 6), Location = new Point(0, 1) };
             track.Controls.Add(fill);
 
-            var val = Text11(d.Total > TimeSpan.Zero ? Format.Hhmm(d.Total) : "–", Theme.Sub);
+            var absence = _tracker.AbsenceTypeFor(d.Date);
+            var val = Text11(absence is { } at ? at.Emoji()
+                                               : (d.Total > TimeSpan.Zero ? Format.Hhmm(d.Total) : "–"), Theme.Sub);
             val.SetBounds(ContentW - 62, 5, 58, 15); val.TextAlign = ContentAlignment.MiddleRight;
 
             row.Controls.AddRange(new Control[] { dn, track, val });
@@ -525,6 +530,109 @@ public sealed class PanelForm : Form
         dp.Location = new Point(ContentW - 120 - 14, 4);
         row.Controls.Add(lbl); row.Controls.Add(dp);
         return dp;
+    }
+
+    // MARK: Abwesenheit (Urlaub / Krank / Feiertag)
+
+    private DateTimePicker? _dpAbsVon, _dpAbsBis;
+    private Button? _absAddBtn;
+    private AbsenceType _absType = AbsenceType.Urlaub;
+    private DateTime _absVon = DateTime.Today;   // ueberleben Rebuild (Typ-Umschalter/Datumwechsel)
+    private DateTime _absBis = DateTime.Today;
+
+    private void BuildAbwesenheit()
+    {
+        _content.Controls.Add(SubHeader("Abwesenheit"));
+        _content.Controls.Add(Divider());
+
+        _content.Controls.Add(Segmented(new[] { "Urlaub", "Krank", "Feiertag" }, (int)_absType,
+            i => { _absType = (AbsenceType)i; Rebuild(); }));
+
+        _dpAbsVon = FieldRow("Von", out var rv); _dpAbsVon.Format = DateTimePickerFormat.Short;
+        _dpAbsVon.Value = _absVon;   // VOR dem Handler setzen, sonst Rebuild-Schleife
+        _content.Controls.Add(rv);
+        _dpAbsBis = FieldRow("Bis", out var rb); _dpAbsBis.Format = DateTimePickerFormat.Short;
+        _dpAbsBis.Value = _absBis;
+        _content.Controls.Add(rb);
+
+        _dpAbsVon.ValueChanged += (_, _) =>
+        {
+            _absVon = _dpAbsVon.Value.Date;
+            if (_absBis < _absVon) { _absBis = _absVon; _dpAbsBis!.Value = _absBis; }
+            UpdateAbsButton();
+        };
+        _dpAbsBis.ValueChanged += (_, _) => { _absBis = _dpAbsBis.Value.Date; UpdateAbsButton(); };
+
+        _absAddBtn = new Button
+        {
+            AutoSize = false, Size = new Size(ContentW - 28, 32), FlatStyle = FlatStyle.Flat,
+            BackColor = Theme.Accent, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
+        };
+        _absAddBtn.FlatAppearance.BorderSize = 0;
+        _absAddBtn.Margin = new Padding(14, 6, 0, 6);
+        _absAddBtn.Click += (_, _) => { _tracker.SetAbsence(_absVon, _absBis, _absType); Rebuild(); };
+        UpdateAbsButton();
+        _content.Controls.Add(_absAddBtn);
+
+        _content.Controls.Add(Divider());
+
+        // Kopfzeile: Jahr + Zaehler je Typ (nur Typen mit >0)
+        int year = DateTime.Today.Year;
+        var counts = _tracker.AbsenceCounts(year);
+        var headRow = NewRow(20);
+        var yl = Text11(year.ToString(), Theme.Tert); yl.SetBounds(14, 2, 60, 16);
+        var parts = new List<string>();
+        foreach (AbsenceType t in Enum.GetValues<AbsenceType>())
+            if (counts.TryGetValue(t, out var c) && c > 0) parts.Add($"{t.Emoji()}{c}");
+        var cl = Text11(string.Join("   ", parts), Theme.Sub);
+        cl.SetBounds(ContentW - 174, 2, 160, 16); cl.TextAlign = ContentAlignment.MiddleRight;
+        headRow.Controls.Add(yl); headRow.Controls.Add(cl);
+        _content.Controls.Add(headRow);
+
+        var runs = _tracker.AbsenceRuns();
+        if (runs.Count == 0)
+        {
+            var none = Text12("keine Abwesenheiten erfasst", Theme.Tert);
+            var row = NewRow(22); none.SetBounds(14, 3, 220, 16); row.Controls.Add(none);
+            _content.Controls.Add(row);
+        }
+        else
+        {
+            foreach (var run in runs)
+            {
+                var row = NewRow(24);
+                var lbl = Text12($"{run.Type.Emoji()}  {RunLabel(run)}", Theme.Ink);
+                lbl.SetBounds(14, 4, 170, 16);
+                var days = Text11($"{run.Workdays} T", Theme.Sub);
+                days.SetBounds(ContentW - 74, 5, 40, 15); days.TextAlign = ContentAlignment.MiddleRight;
+                var del = IconLabel(Glyphs.Delete, Theme.Sub, _iconSmall);
+                del.SetBounds(ContentW - 32, 4, 18, 16); del.Cursor = Cursors.Hand;
+                DateTime s = run.Start, e = run.End;
+                del.Click += (_, _) => { _tracker.ClearAbsence(s, e); Rebuild(); };
+                row.Controls.Add(lbl); row.Controls.Add(days); row.Controls.Add(del);
+                _content.Controls.Add(row);
+            }
+        }
+    }
+
+    private void UpdateAbsButton()
+    {
+        if (_absAddBtn is null) return;
+        var n = _tracker.WorkdayCount(_absVon, _absBis);
+        var valid = n > 0;
+        _absAddBtn.Enabled = valid;
+        _absAddBtn.Text = valid ? $"Eintragen ({n} {(n == 1 ? "Werktag" : "Werktage")})" : "Kein Werktag im Zeitraum";
+        _absAddBtn.BackColor = valid ? Theme.Accent : Theme.TrackOff;
+    }
+
+    /// <summary>„Mo 20.07 – Mo 27.07" bzw. „Do 02.01" bei Einzeltag.</summary>
+    private string RunLabel(AbsenceRun run)
+    {
+        const string f = "ddd dd.MM";
+        var ci = CultureInfo.CurrentCulture;
+        return run.Start.Date == run.End.Date
+            ? run.Start.ToString(f, ci)
+            : $"{run.Start.ToString(f, ci)} – {run.End.ToString(f, ci)}";
     }
 
     // MARK: Übersicht (Monat / Jahr)

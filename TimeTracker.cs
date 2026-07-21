@@ -14,6 +14,7 @@ namespace Zeiterfassung;
 public sealed class TimeTracker
 {
     private readonly List<WorkSegment> _segments = new();
+    private readonly Dictionary<DateTime, AbsenceType> _absences = new();   // Key = Mitternacht, ganze Tage
 
     /// <summary>Feuert bei jeder Zustandsaenderung (Start/Stop/Nachtrag/Loeschen).</summary>
     public event Action? Changed;
@@ -21,6 +22,7 @@ public sealed class TimeTracker
     public TimeTracker()
     {
         Load();
+        LoadAbsences();
     }
 
     public IReadOnlyList<WorkSegment> Segments => _segments;
@@ -169,6 +171,9 @@ public sealed class TimeTracker
         var day = kontostart.Date;
         while (day < today) // nur abgeschlossene Tage bekommen ein Soll
         {
+            // Abwesenheit (Urlaub/Krank/Feiertag): Tag komplett neutral — auch wenn
+            // versehentlich Zeit erfasst wurde. Kein +/− aufs Konto.
+            if (_absences.ContainsKey(day)) { day = day.AddDays(1); continue; }
             if (day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday)
             {
                 var next = day.AddDays(1);
@@ -177,9 +182,106 @@ public sealed class TimeTracker
             }
             day = day.AddDays(1);
         }
-        // Heute: reines Ist-Plus, kein Soll-Abzug.
-        saldo += Total(new DateInterval(today, today.AddDays(1))).TotalSeconds;
+        // Heute: reines Ist-Plus, kein Soll-Abzug (Abwesenheit heute -> ebenfalls neutral).
+        if (!_absences.ContainsKey(today))
+            saldo += Total(new DateInterval(today, today.AddDays(1))).TotalSeconds;
         return TimeSpan.FromSeconds(saldo);
+    }
+
+    // MARK: Abwesenheit (Urlaub / Krank / Feiertag — ganze Tage)
+
+    /// <summary>Typ der Abwesenheit an einem Tag, oder null bei normalem Tag.</summary>
+    public AbsenceType? AbsenceTypeFor(DateTime day) =>
+        _absences.TryGetValue(day.Date, out var t) ? t : null;
+
+    /// <summary>Traegt einen Zeitraum als Abwesenheit ein. Wochenenden (Sa/So) werden
+    /// uebersprungen — der Saldo zaehlt sie ohnehin nicht. von/bis inklusiv, Reihenfolge egal.</summary>
+    public void SetAbsence(DateTime von, DateTime bis, AbsenceType type)
+    {
+        var day = (von < bis ? von : bis).Date;
+        var end = (von < bis ? bis : von).Date;
+        while (day <= end)
+        {
+            if (day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday)
+                _absences[day] = type;
+            day = day.AddDays(1);
+        }
+        SaveAbsences();
+        Changed?.Invoke();
+    }
+
+    /// <summary>Entfernt die Abwesenheit eines einzelnen Tages.</summary>
+    public void ClearAbsence(DateTime day)
+    {
+        if (_absences.Remove(day.Date)) { SaveAbsences(); Changed?.Invoke(); }
+    }
+
+    /// <summary>Entfernt alle Abwesenheitstage im Bereich (inkl. Grenzen) — loescht einen Block.</summary>
+    public void ClearAbsence(DateTime von, DateTime bis)
+    {
+        var day = (von < bis ? von : bis).Date;
+        var end = (von < bis ? bis : von).Date;
+        var changed = false;
+        while (day <= end) { changed |= _absences.Remove(day); day = day.AddDays(1); }
+        if (changed) { SaveAbsences(); Changed?.Invoke(); }
+    }
+
+    /// <summary>Anzahl der Werktage (Mo–Fr) in einem Bereich — fuer die Button-Vorschau.</summary>
+    public int WorkdayCount(DateTime von, DateTime bis)
+    {
+        var day = (von < bis ? von : bis).Date;
+        var end = (von < bis ? bis : von).Date;
+        var n = 0;
+        while (day <= end)
+        {
+            if (day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday) n++;
+            day = day.AddDays(1);
+        }
+        return n;
+    }
+
+    /// <summary>Zusammenhaengende Bloecke gleichen Typs, neueste zuerst. Ein Block bricht
+    /// bei Typwechsel oder wenn zwischen zwei Tagen ein Werktag Luecke liegt (Wochenende ueberbrueckt).</summary>
+    public List<AbsenceRun> AbsenceRuns()
+    {
+        var sorted = _absences.Keys.OrderBy(d => d).ToList();
+        var runs = new List<AbsenceRun>();
+        int i = 0;
+        while (i < sorted.Count)
+        {
+            var type = _absences[sorted[i]];
+            DateTime start = sorted[i], end = sorted[i];
+            int count = 1, j = i + 1;
+            while (j < sorted.Count && _absences[sorted[j]] == type && OnlyWeekendBetween(end, sorted[j]))
+            {
+                end = sorted[j]; count++; j++;
+            }
+            runs.Add(new AbsenceRun(start, end, type, count));
+            i = j;
+        }
+        return runs.OrderByDescending(r => r.Start).ToList();
+    }
+
+    /// <summary>true, wenn zwischen a (exkl.) und b (exkl.) nur Wochenendtage liegen.</summary>
+    private static bool OnlyWeekendBetween(DateTime a, DateTime b)
+    {
+        var d = a.AddDays(1);
+        while (d < b)
+        {
+            if (d.DayOfWeek != DayOfWeek.Saturday && d.DayOfWeek != DayOfWeek.Sunday) return false;
+            d = d.AddDays(1);
+        }
+        return true;
+    }
+
+    /// <summary>Anzahl erfasster Tage je Typ im Kalenderjahr — fuer die Kopfzeile.</summary>
+    public Dictionary<AbsenceType, int> AbsenceCounts(int year)
+    {
+        var outp = new Dictionary<AbsenceType, int>();
+        foreach (var kv in _absences)
+            if (kv.Key.Year == year)
+                outp[kv.Value] = outp.GetValueOrDefault(kv.Value) + 1;
+        return outp;
     }
 
     // MARK: Monats-/Jahresaufschluesselung (Uebersicht)
@@ -459,6 +561,50 @@ public sealed class TimeTracker
         catch
         {
             // Kaputte Datei -> leer starten statt crashen.
+        }
+    }
+
+    private static string AbsencePath
+    {
+        get
+        {
+            var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dir = Path.Combine(baseDir, "Zeiterfassung");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "absence.json");
+        }
+    }
+
+    private void SaveAbsences()
+    {
+        try
+        {
+            var list = _absences.Select(kv => new AbsenceDay(kv.Key, kv.Value)).ToList();
+            var json = JsonSerializer.Serialize(list, JsonOpts);
+            var path = AbsencePath;
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, json);
+            if (File.Exists(path)) File.Replace(tmp, path, null);
+            else File.Move(tmp, path);
+        }
+        catch { /* Persistenz-Fehler darf die App nicht abschiessen. */ }
+    }
+
+    private void LoadAbsences()
+    {
+        try
+        {
+            var path = AbsencePath;
+            if (!File.Exists(path)) return;
+            var json = File.ReadAllText(path);
+            var decoded = JsonSerializer.Deserialize<List<AbsenceDay>>(json, JsonOpts);
+            if (decoded is null) return;
+            _absences.Clear();
+            foreach (var a in decoded) _absences[a.Date.Date] = a.Type;
+        }
+        catch
+        {
+            // Kaputte Datei -> ohne Abwesenheiten starten statt crashen.
         }
     }
 }
